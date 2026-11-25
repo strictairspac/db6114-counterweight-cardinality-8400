@@ -1,14 +1,20 @@
 import json
-from sqlalchemy import func, select
+from time import time
+
+from sqlalchemy import func, insert, select
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from migrations.v001_workbench import upgrade
+from migrations.v001_workbench import upgrade as upgrade_v1
+from migrations.v002_revisions import upgrade as upgrade_v2
 from src.config.resources import engine
 from src.config.settings import DEMO_PASSWORD
+from src.constants.job_state import RevisionState
 from src.constants.roles import Role
+from src.domain import scenario
 from src.domain.scenario import FIXTURES
 from src.models.cases import cases
+from src.models.revisions import revisions
 from src.models.users import users
 from src.utils.passwords import hash_password
 
@@ -23,7 +29,21 @@ def insert_new(db, table, key, values):
 
 def setup_schema():
     with engine.begin() as db:
-        upgrade(db)
+        upgrade_v1(db)
+        upgrade_v2(db)
+
+
+def seed_case(db, fixture):
+    stats = scenario.compute_statistics(db, fixture["payload"])
+    change = db.execute(insert(cases).values(
+        code=fixture["code"], title=fixture["title"], description=fixture["description"],
+        created_by="seed", current_version=1,
+    ))
+    now = int(time())
+    db.execute(insert(revisions).values(
+        case_id=change.inserted_primary_key[0], version=1, payload=fixture["payload"], stats=stats,
+        status=RevisionState.READY, base_version=None, actor="seed", created_at=now, finished_at=now,
+    ))
 
 
 def seed():
@@ -34,8 +54,10 @@ def seed():
                 insert_new(db, users, "username", {
                     "username": role.value, "role": role.value, "password_hash": hash_password(DEMO_PASSWORD),
                 })
+        seeded = set(db.execute(select(cases.c.code)).scalars())
         for fixture in FIXTURES:
-            insert_new(db, cases, "code", {**fixture, "created_by": "seed"})
+            if fixture["code"] not in seeded:
+                seed_case(db, fixture)
         return {table.name: db.scalar(select(func.count()).select_from(table)) for table in (users, cases)}
 
 

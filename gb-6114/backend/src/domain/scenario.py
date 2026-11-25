@@ -3,7 +3,8 @@ from statistics import mean
 from .estimates import JointEstimator, q_error
 from .fixtures import FIXTURES
 from .inputs import parse
-from .lot_table import actual_count, inspection_table, joint_frequencies
+from .lot_table import actual_count, calibration_table, inspection_table, joint_frequencies
+from .statistics import pack, unpack
 
 
 CONFIG = {
@@ -27,14 +28,21 @@ def validate(payload):
     parse(payload)
 
 
-def run(payload, parameter, db):
-    calibration, inspection, checks = parse(payload)
+def compute_statistics(db, payload):
+    """用真实 MySQL 汇总校准批次的联合频次，作为该资料版本的发布统计。"""
+    calibration, _, _ = parse(payload)
+    with calibration_table(db, calibration) as table:
+        return pack(joint_frequencies(db, table))
+
+
+def run(payload, stats, parameter, db):
+    _, inspection, checks = parse(payload)
     inspection_size = sum(cell.count for cell in inspection)
+    estimator = JointEstimator(unpack(stats), parameter)
     rows = []
     base_errors = []
     joint_errors = []
-    with inspection_table(db, calibration, inspection) as table:
-        estimator = JointEstimator(joint_frequencies(db, table), parameter)
+    with inspection_table(db, inspection) as table:
         for check in checks:
             independent = float(inspection_size * estimator.independent(check.mass, check.slot))
             joint = float(inspection_size * estimator.joint(check.mass, check.slot))

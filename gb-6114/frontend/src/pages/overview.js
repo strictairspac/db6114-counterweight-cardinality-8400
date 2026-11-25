@@ -16,7 +16,8 @@ export async function overview(config) {
       el("aside", {}, el("h3", {}, config.direction), el("p", {}, config.mechanism))),
     el("div", {class: "split"},
       section(`现有${config.unit}`,
-        cases.length ? table(["编号", "名称", "登记人"], cases.slice(0, 4).map(item => [item.code, item.title, item.created_by]), "近期资料") : empty("进入资料页登记第一条资料。")),
+        cases.length ? table(["编号", "名称", "已发布", "登记人"], cases.slice(0, 4).map(item =>
+          [item.code, item.title, `v${item.current_version}`, item.created_by]), "近期资料") : empty("进入资料页登记第一条资料。")),
       section("最近执行", latest ?
         el("div", {class: "stack"}, status(latest.status), el("strong", {}, latest.case_title),
           el("a", {href: `#runs/${latest.id}`}, "查看执行进度")) :

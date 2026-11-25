@@ -3,9 +3,10 @@ from time import time
 from fastapi import HTTPException
 from sqlalchemy import insert, select
 
-from src.constants.job_state import JobState
+from src.constants.job_state import JobState, RevisionState
 from src.domain.scenario import CONFIG
 from src.models.cases import cases
+from src.models.revisions import revisions
 from src.models.runs import runs
 from . import audit, cases as case_service
 
@@ -28,9 +29,14 @@ def list_entries(db):
 def enqueue(db, case_id, parameter, actor):
     if parameter > CONFIG["max_parameter"]:
         raise HTTPException(422, f"参数不能超过 {CONFIG['max_parameter']}")
-    case_service.get(db, case_id)
+    entry = case_service.get(db, case_id)
+    published = db.scalar(select(revisions.c.status).where(
+        revisions.c.case_id == case_id, revisions.c.version == entry["current_version"]))
+    if published != RevisionState.READY:
+        raise HTTPException(409, "校准统计尚未就绪，请稍后提交执行")
     change = db.execute(insert(runs).values(
-        case_id=case_id, status=JobState.QUEUED, parameter=parameter, actor=actor, created_at=int(time())
+        case_id=case_id, case_version=entry["current_version"], status=JobState.QUEUED,
+        parameter=parameter, actor=actor, created_at=int(time()),
     ))
     run_id = change.inserted_primary_key[0]
     audit.record(db, "enqueue", actor, "run", run_id)

@@ -6,6 +6,7 @@ runs = Table(
     "runs", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("case_id", ForeignKey("cases.id"), nullable=False, index=True),
+    Column("case_version", Integer, nullable=True),
     Column("status", String(16), nullable=False, index=True),
     Column("parameter", Integer, nullable=False),
     Column("actor", String(48), nullable=False),

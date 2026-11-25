@@ -5,7 +5,7 @@ from sqlalchemy import text
 
 
 @contextmanager
-def inspection_table(db, calibration, inspection):
+def lot_table(db, lots):
     table = f"counterweight_lot_{uuid4().hex[:12]}"
     db.execute(text(f"""
         CREATE TEMPORARY TABLE {table} (
@@ -18,12 +18,20 @@ def inspection_table(db, calibration, inspection):
     """))
     try:
         insert = text(f"INSERT INTO {table} (phase, mass, slot_band) VALUES (:phase, :mass, :slot)")
-        for phase, cells in enumerate((calibration, inspection)):
+        for phase, cells in enumerate(lots):
             for cell in cells:
                 db.execute(insert, [dict(phase=phase, mass=cell.mass, slot=cell.slot) for _ in range(cell.count)])
         yield table
     finally:
         db.execute(text(f"DROP TEMPORARY TABLE IF EXISTS {table}"))
+
+
+def calibration_table(db, calibration):
+    return lot_table(db, [calibration])
+
+
+def inspection_table(db, inspection):
+    return lot_table(db, [inspection])
 
 
 def joint_frequencies(db, table):
@@ -37,5 +45,5 @@ def joint_frequencies(db, table):
 def actual_count(db, table, check):
     return db.execute(text(f"""
         SELECT COUNT(*) FROM {table}
-        WHERE phase = 1 AND mass = :mass AND slot_band = :slot
+        WHERE phase = 0 AND mass = :mass AND slot_band = :slot
     """), {"mass": check.mass, "slot": check.slot}).scalar_one()

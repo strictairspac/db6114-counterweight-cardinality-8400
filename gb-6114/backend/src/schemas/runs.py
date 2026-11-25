@@ -9,6 +9,7 @@ class RunInput(BaseModel):
 class RunEntry(BaseModel):
     id: int
     case_id: int
+    case_version: int | None
     case_title: str
     status: JobState
     parameter: int

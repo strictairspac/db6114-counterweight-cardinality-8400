@@ -6,7 +6,14 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.config.resources import cache, engine
-from src.services.execution import JobFailure, fail, service_one
+from src.services.execution import (
+    JobFailure,
+    RecalcFailure,
+    fail,
+    fail_recalc,
+    recalculate_one,
+    service_one,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("worker")
@@ -26,9 +33,15 @@ def work():
             try:
                 if service_one():
                     continue
+                if recalculate_one():
+                    continue
             except JobFailure as exc:
                 logger.exception("Execution %s failed", exc.run_id)
                 fail(exc)
+                continue
+            except RecalcFailure as exc:
+                logger.exception("Recalculation %s failed", exc.revision_id)
+                fail_recalc(exc)
                 continue
             cache.blpop("workbench:wake", timeout=1)
         except (RedisError, SQLAlchemyError):
